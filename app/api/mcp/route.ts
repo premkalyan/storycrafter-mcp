@@ -87,13 +87,14 @@ async function getProjectConfig(bearerToken: string): Promise<ProjectConfig> {
       { timeout: 10000 }
     );
 
-    console.log(`[StoryCrafter MCP] ✅ Got project config: ${response.data.projectId}`);
-
-    if (!response.data) {
+    if (!response.data || !response.data.project) {
       throw new Error(`No configuration found for API key`);
     }
 
-    return response.data;
+    const project = response.data.project;
+    console.log(`[StoryCrafter MCP] ✅ Got project config: ${project.projectId}`);
+
+    return project;
   } catch (error: any) {
     console.error(`[StoryCrafter MCP] ❌ Error fetching config:`, error.response?.status, error.message);
     if (error.response?.status === 404) {
