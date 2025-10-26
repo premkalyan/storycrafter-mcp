@@ -454,7 +454,12 @@ async function handleGenerateEpics(args: Record<string, any>, bearerToken: strin
     };
   } catch (error: any) {
     if (error.response) {
-      throw new Error(`StoryCrafter service error: ${error.response.data?.detail || error.response.statusText}`);
+      // Handle FastAPI validation errors (422) - detail can be string or array of validation errors
+      const detail = error.response.data?.detail;
+      const errorMessage = typeof detail === 'string'
+        ? detail
+        : JSON.stringify(detail, null, 2);
+      throw new Error(`StoryCrafter service error (${error.response.status}): ${errorMessage}`);
     } else if (error.request) {
       throw new Error(`StoryCrafter service unavailable: ${STORYCRAFTER_SERVICE_URL}`);
     } else {
@@ -526,7 +531,12 @@ async function handleGenerateStories(args: Record<string, any>, bearerToken: str
     };
   } catch (error: any) {
     if (error.response) {
-      throw new Error(`StoryCrafter service error: ${error.response.data?.detail || error.response.statusText}`);
+      // Handle FastAPI validation errors (422) - detail can be string or array of validation errors
+      const detail = error.response.data?.detail;
+      const errorMessage = typeof detail === 'string'
+        ? detail
+        : JSON.stringify(detail, null, 2);
+      throw new Error(`StoryCrafter service error (${error.response.status}): ${errorMessage}`);
     } else if (error.request) {
       throw new Error(`StoryCrafter service unavailable: ${STORYCRAFTER_SERVICE_URL}`);
     } else {
@@ -601,7 +611,12 @@ async function handleRegenerateEpic(args: Record<string, any>, bearerToken: stri
     };
   } catch (error: any) {
     if (error.response) {
-      throw new Error(`StoryCrafter service error: ${error.response.data?.detail || error.response.statusText}`);
+      // Handle FastAPI validation errors (422) - detail can be string or array of validation errors
+      const detail = error.response.data?.detail;
+      const errorMessage = typeof detail === 'string'
+        ? detail
+        : JSON.stringify(detail, null, 2);
+      throw new Error(`StoryCrafter service error (${error.response.status}): ${errorMessage}`);
     } else if (error.request) {
       throw new Error(`StoryCrafter service unavailable: ${STORYCRAFTER_SERVICE_URL}`);
     } else {
@@ -681,7 +696,12 @@ async function handleRegenerateStory(args: Record<string, any>, bearerToken: str
     };
   } catch (error: any) {
     if (error.response) {
-      throw new Error(`StoryCrafter service error: ${error.response.data?.detail || error.response.statusText}`);
+      // Handle FastAPI validation errors (422) - detail can be string or array of validation errors
+      const detail = error.response.data?.detail;
+      const errorMessage = typeof detail === 'string'
+        ? detail
+        : JSON.stringify(detail, null, 2);
+      throw new Error(`StoryCrafter service error (${error.response.status}): ${errorMessage}`);
     } else if (error.request) {
       throw new Error(`StoryCrafter service unavailable: ${STORYCRAFTER_SERVICE_URL}`);
     } else {
