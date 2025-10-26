@@ -2,7 +2,8 @@ export default function Home() {
   return (
     <div className="min-h-screen p-8 max-w-4xl mx-auto bg-white text-black">
       <h1 className="text-4xl font-bold mb-4 text-black">StoryCrafter MCP Server</h1>
-      <p className="mb-4 text-gray-700">Version 1.0.0 - AI-Powered Backlog Generator for VISHKAR Consensus</p>
+      <p className="mb-4 text-gray-700">Version 1.0.0 - AI-Powered Backlog Generator for VISHKAR Project Context</p>
+      <p className="mb-4 text-gray-600">Two-phase workflow: Fast epic generation (Claude Sonnet 4.5) + Detailed story generation (GPT-5) with iterative refinement</p>
 
       <section className="mb-8">
         <h2 className="text-2xl font-bold mt-8 mb-4 text-black">Available Endpoints</h2>
@@ -12,28 +13,64 @@ export default function Home() {
       </section>
 
       <section className="mb-8">
-        <h2 className="text-2xl font-bold mt-8 mb-4 text-black">Available Tools (2 total)</h2>
+        <h2 className="text-2xl font-bold mt-8 mb-4 text-black">Available Tools (4 total)</h2>
+        <p className="mb-4 text-gray-600">Two-phase workflow: Fast epics first, then detailed stories. Iterative refinement supported.</p>
 
-        <h3 className="text-xl font-semibold mt-6 mb-3 text-black">Backlog Generation</h3>
+        <h3 className="text-xl font-semibold mt-6 mb-3 text-black">Phase 1: Epic Generation ⚡</h3>
         <ul className="list-disc pl-6 space-y-2 text-black">
           <li>
-            <strong className="text-black">generate_backlog</strong> - Generate complete project backlog from VISHKAR 3-agent consensus discussion
+            <strong className="text-black">generate_epics</strong> - ⚡ FAST (15-20 seconds) epic generation
             <ul className="list-disc pl-6 mt-2 space-y-1 text-gray-700">
-              <li>Generates 6-8 epics with 20-40 detailed user stories</li>
-              <li>Includes acceptance criteria, technical tasks, story points, and time estimates</li>
-              <li>Uses Claude Sonnet 4.5 for epic structure and GPT-5 for story details</li>
-              <li>Takes 30-60 seconds per backlog (~$0.44 cost)</li>
+              <li>Generates 5-8 high-level epics from VISHKAR project context</li>
+              <li>Uses Claude Sonnet 4.5 for fast, intelligent epic structure</li>
+              <li>Returns titles, descriptions, priorities, categories, acceptance criteria</li>
+              <li>~$0.15 per generation, 15-20 seconds</li>
+              <li><strong>Use this FIRST</strong> to get quick epic overview before detailed stories</li>
             </ul>
           </li>
           <li>
-            <strong className="text-black">get_backlog_summary</strong> - Get summary statistics from a generated backlog
+            <strong className="text-black">regenerate_epic</strong> - 🔄 Iterative epic refinement (20-30 seconds)
             <ul className="list-disc pl-6 mt-2 space-y-1 text-gray-700">
-              <li>Extracts total epics, stories, and estimated hours</li>
-              <li>Provides per-epic breakdown</li>
-              <li>Instant processing, no AI costs</li>
+              <li>Regenerate single epic based on user feedback</li>
+              <li>Uses Claude Sonnet 4.5 with feedback incorporation</li>
+              <li>Returns updated epic with same structure</li>
+              <li>Use when user wants to improve specific epic</li>
             </ul>
           </li>
         </ul>
+
+        <h3 className="text-xl font-semibold mt-6 mb-3 text-black">Phase 2: Story Generation 🔄</h3>
+        <ul className="list-disc pl-6 space-y-2 text-black">
+          <li>
+            <strong className="text-black">generate_stories</strong> - 🔄 DETAILED (3-5 minutes) story generation
+            <ul className="list-disc pl-6 mt-2 space-y-1 text-gray-700">
+              <li>Generates comprehensive user stories for epics</li>
+              <li>Uses GPT-5 (128K output) for detailed story expansion</li>
+              <li>Includes Given/When/Then acceptance criteria, technical tasks, story points (Fibonacci), estimated hours</li>
+              <li>~$0.29 per generation, 3-5 minutes</li>
+              <li><strong>Call AFTER generate_epics</strong> to create full backlog</li>
+            </ul>
+          </li>
+          <li>
+            <strong className="text-black">regenerate_story</strong> - 🔄 Iterative story refinement (1-2 minutes)
+            <ul className="list-disc pl-6 mt-2 space-y-1 text-gray-700">
+              <li>Regenerate single story based on user feedback</li>
+              <li>Uses GPT-5 with feedback incorporation</li>
+              <li>Returns updated story with better criteria and tasks</li>
+              <li>Use when user wants to improve specific story</li>
+            </ul>
+          </li>
+        </ul>
+
+        <div className="mt-4 bg-blue-50 border border-blue-200 p-4 rounded">
+          <h4 className="font-semibold text-black mb-2">Recommended Workflow:</h4>
+          <ol className="list-decimal pl-6 space-y-1 text-black">
+            <li>Call <strong>generate_epics</strong> with VISHKAR project context (15-20s)</li>
+            <li>Review epics, use <strong>regenerate_epic</strong> for any that need refinement</li>
+            <li>Call <strong>generate_stories</strong> with approved epics (3-5min)</li>
+            <li>Use <strong>regenerate_story</strong> for any stories needing improvement</li>
+          </ol>
+        </div>
       </section>
 
       <section className="mb-8">
@@ -47,13 +84,13 @@ Response:
 {
   "name": "StoryCrafter MCP",
   "version": "1.0.0",
-  "tools": ["generate_backlog", "get_backlog_summary"],
+  "tools": ["generate_epics", "generate_stories", "regenerate_epic", "regenerate_story"],
   "service_url": "https://storycrafter-service.vercel.app",
   "status": "healthy"
 }`}
         </pre>
 
-        <h3 className="text-xl font-semibold mt-6 mb-3 text-black">Generate Backlog</h3>
+        <h3 className="text-xl font-semibold mt-6 mb-3 text-black">Example: Generate Epics</h3>
         <pre className="bg-gray-100 p-4 rounded overflow-x-auto text-black text-sm">
 {`POST /api/mcp
 Content-Type: application/json
@@ -61,32 +98,47 @@ Content-Type: application/json
 {
   "method": "tools/call",
   "params": {
-    "tool": "generate_backlog",
+    "tool": "generate_epics",
     "arguments": {
-      "consensus_messages": [
-        {
-          "role": "system",
-          "content": "Project: Task Management App with offline support"
+      "project_context": {
+        "project_summary": {
+          "name": "TaskMaster",
+          "description": "Task Management App with offline support",
+          "target_users": "Remote teams needing offline task management"
         },
-        {
-          "role": "alex",
-          "content": "As a product manager, I want users to create tasks, set priorities, and track completion offline"
-        },
-        {
-          "role": "blake",
-          "content": "As technical architect, I recommend IndexedDB for offline storage and service workers for sync"
-        },
-        {
-          "role": "casey",
-          "content": "As project manager, we have 4 weeks and 2 developers. Focus on core features first"
+        "final_decisions": {
+          "technical_stack": "React Native, IndexedDB, Service Workers",
+          "timeline": "4 weeks",
+          "team_size": "2 developers",
+          "priorities": ["Offline support", "Task CRUD", "Sync"]
         }
-      ],
-      "project_metadata": {
-        "project_name": "TaskMaster",
-        "timeline": "4 weeks",
-        "team_size": "2 developers"
-      },
-      "use_full_context": true
+      }
+    }
+  }
+}`}
+        </pre>
+
+        <h3 className="text-xl font-semibold mt-6 mb-3 text-black">Example: Generate Stories</h3>
+        <pre className="bg-gray-100 p-4 rounded overflow-x-auto text-black text-sm">
+{`POST /api/mcp
+Content-Type: application/json
+
+{
+  "method": "tools/call",
+  "params": {
+    "tool": "generate_stories",
+    "arguments": {
+      "project_context": { /* same as above */ },
+      "epics": [
+        {
+          "id": "EPIC-1",
+          "title": "User Authentication & Profile",
+          "description": "Secure user authentication system",
+          "priority": "high",
+          "category": "security"
+        }
+        /* ... more epics from generate_epics output */
+      ]
     }
   }
 }`}
@@ -141,14 +193,25 @@ Content-Type: application/json
 
       <section className="mb-8">
         <h2 className="text-2xl font-bold mt-8 mb-4 text-black">VISHKAR Integration</h2>
-        <p className="mb-4 text-black">StoryCrafter is designed to work seamlessly with the VISHKAR 3-agent consensus system:</p>
-        <ol className="list-decimal pl-6 space-y-2 text-black">
-          <li><strong className="text-black">System</strong> - Provides project context and requirements</li>
-          <li><strong className="text-black">Alex (Product Manager)</strong> - Defines user needs and product vision</li>
-          <li><strong className="text-black">Blake (Technical Architect)</strong> - Contributes technical approach and architecture decisions</li>
-          <li><strong className="text-black">Casey (Project Manager)</strong> - Adds constraints, timeline, and resource considerations</li>
-          <li><strong className="text-black">StoryCrafter</strong> - Synthesizes all inputs into a comprehensive, actionable backlog</li>
-        </ol>
+        <p className="mb-4 text-black">StoryCrafter works with VISHKAR project context (project_summary + final_decisions):</p>
+        <div className="bg-gray-50 p-4 rounded mb-4">
+          <h4 className="font-semibold text-black mb-2">VISHKAR Provides:</h4>
+          <ul className="list-disc pl-6 space-y-1 text-black">
+            <li><strong>project_summary</strong> - Project name, description, target users, goals</li>
+            <li><strong>final_decisions</strong> - Technical stack, timeline, team size, priorities, constraints</li>
+            <li><strong>questions_and_answers</strong> (optional) - Clarifications from consensus discussion</li>
+          </ul>
+        </div>
+        <div className="bg-green-50 p-4 rounded">
+          <h4 className="font-semibold text-black mb-2">StoryCrafter Generates:</h4>
+          <ol className="list-decimal pl-6 space-y-1 text-black">
+            <li><strong>generate_epics</strong> - 5-8 high-level epics (15-20s)</li>
+            <li><strong>User reviews epics</strong> - Feedback loop with regenerate_epic</li>
+            <li><strong>generate_stories</strong> - Comprehensive user stories for epics (3-5min)</li>
+            <li><strong>User reviews stories</strong> - Feedback loop with regenerate_story</li>
+            <li><strong>Final Output</strong> - Complete, validated backlog ready for JIRA</li>
+          </ol>
+        </div>
       </section>
 
       <section className="mb-8">
