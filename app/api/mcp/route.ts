@@ -79,11 +79,11 @@ async function getProjectConfig(bearerToken: string): Promise<ProjectConfig> {
   try {
     console.log(`[StoryCrafter MCP] Fetching config from Project Registry`);
     console.log(`[StoryCrafter MCP] Bearer token: ${bearerToken.substring(0, 20)}...`);
-    console.log(`[StoryCrafter MCP] Full URL: ${PROJECT_REGISTRY_URL}/api/projects/${bearerToken}`);
+    console.log(`[StoryCrafter MCP] Full URL: ${PROJECT_REGISTRY_URL}/api/project?apiKey=${bearerToken.substring(0, 20)}...`);
 
-    // Use existing Project Registry endpoint - it returns full config with decrypted credentials
+    // Use query parameter endpoint as workaround for Vercel dynamic route bug
     const response = await axios.get(
-      `${PROJECT_REGISTRY_URL}/api/projects/${bearerToken}`,
+      `${PROJECT_REGISTRY_URL}/api/project?apiKey=${bearerToken}`,
       { timeout: 10000 }
     );
 
