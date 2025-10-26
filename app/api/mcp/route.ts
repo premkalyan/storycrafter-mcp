@@ -77,27 +77,20 @@ interface MCPRequest {
  */
 async function getProjectConfig(bearerToken: string): Promise<ProjectConfig> {
   try {
+    // Use existing Project Registry endpoint - it returns full config with decrypted credentials
     const response = await axios.get(
-      `${PROJECT_REGISTRY_URL}/api/projects/by-token`,
-      {
-        headers: {
-          'Authorization': `Bearer ${bearerToken}`
-        },
-        timeout: 10000
-      }
+      `${PROJECT_REGISTRY_URL}/api/projects/${bearerToken}`,
+      { timeout: 10000 }
     );
 
     if (!response.data) {
-      throw new Error(`No configuration found for bearer token`);
+      throw new Error(`No configuration found for API key`);
     }
 
     return response.data;
   } catch (error: any) {
-    if (error.response?.status === 401) {
-      throw new Error(`Invalid or expired bearer token. Please check your Prometheus API key.`);
-    }
     if (error.response?.status === 404) {
-      throw new Error(`Project not found for this bearer token. Please register the project in VISHKAR settings.`);
+      throw new Error(`Project not found for this API key. Please register the project in VISHKAR settings.`);
     }
     throw new Error(`Failed to fetch project config: ${error.message}`);
   }
