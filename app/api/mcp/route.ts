@@ -41,63 +41,127 @@ interface MCPRequest {
 
 const MCP_TOOLS = [
   {
-    name: 'generate_backlog',
-    description: 'Generate complete project backlog from VISHKAR 3-agent consensus discussion. Returns 6-8 epics with 20-40 detailed user stories, acceptance criteria, technical tasks, story points, and time estimates.',
+    name: 'generate_epics',
+    description: '⚡ FAST (15-20 seconds): Generate 5-8 high-level Epics from VISHKAR project context using Claude Sonnet 4.5. Returns epic structure with titles, descriptions, and acceptance criteria. Use this first to get quick epic overview.',
     inputSchema: {
       type: 'object',
       properties: {
-        consensus_messages: {
-          type: 'array',
-          description: 'List of messages from 3-agent consensus (system, alex, blake, casey)',
-          items: {
-            type: 'object',
-            properties: {
-              role: {
-                type: 'string',
-                enum: ['system', 'alex', 'blake', 'casey'],
-                description: 'Message role: system (project context), alex (product manager), blake (technical architect), casey (project manager)'
-              },
-              content: {
-                type: 'string',
-                description: 'Message content'
-              }
-            },
-            required: ['role', 'content']
-          }
-        },
-        project_metadata: {
+        project_context: {
           type: 'object',
-          description: 'Optional project metadata',
+          description: 'Complete VISHKAR project context including project_summary, final_decisions, and discussion data',
           properties: {
-            project_name: { type: 'string' },
-            project_description: { type: 'string' },
-            target_users: { type: 'string' },
-            platform: { type: 'string' },
-            timeline: { type: 'string' },
-            team_size: { type: 'string' }
-          }
-        },
-        use_full_context: {
-          type: 'boolean',
-          description: 'Use full context mode (recommended, default: true)',
-          default: true
+            project_summary: { type: 'object' },
+            final_decisions: { type: 'object' },
+            questions_and_answers: { type: 'array' }
+          },
+          required: ['project_summary', 'final_decisions']
         }
       },
-      required: ['consensus_messages']
+      required: ['project_context']
     }
   },
   {
-    name: 'get_backlog_summary',
-    description: 'Get summary statistics from a generated backlog (epic count, story count, total hours, etc.)',
+    name: 'generate_stories',
+    description: '🔄 DETAILED (3-5 minutes): Generate detailed User Stories for specific epics using GPT-5 (128K output). Takes epic data + context and returns comprehensive stories with acceptance criteria, technical tasks, and estimates. Call this after generate_epics for full backlog.',
     inputSchema: {
       type: 'object',
       properties: {
-        backlog: {
+        project_context: {
           type: 'object',
-          description: 'Previously generated backlog object'
+          description: 'Original VISHKAR project context',
+          properties: {
+            project_summary: { type: 'object' },
+            final_decisions: { type: 'object' }
+          },
+          required: ['project_summary', 'final_decisions']
+        },
+        epics: {
+          type: 'array',
+          description: 'Array of epic objects from generate_epics output',
+          items: { type: 'object' }
         }
       },
-      required: ['backlog']
+      required: ['project_context', 'epics']
+    }
+  },
+  {
+    name: 'regenerate_epic',
+    description: '🔄 REGENERATE EPIC (20-30 seconds): Regenerate a single epic based on user feedback using Claude Sonnet 4.5. When user is unhappy with an epic, use this to create an improved version incorporating their comments.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_context: {
+          type: 'object',
+          description: 'Original VISHKAR project context',
+          properties: {
+            project_summary: { type: 'object' },
+            final_decisions: { type: 'object' }
+          },
+          required: ['project_summary', 'final_decisions']
+        },
+        epic: {
+          type: 'object',
+          description: 'The epic object to regenerate (must include id, title, description)',
+          properties: {
+            id: { type: 'string' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            priority: { type: 'string' },
+            category: { type: 'string' }
+          },
+          required: ['id', 'title', 'description']
+        },
+        user_feedback: {
+          type: 'string',
+          description: 'User comments/feedback on what needs to be changed or improved in the epic'
+        }
+      },
+      required: ['project_context', 'epic', 'user_feedback']
+    }
+  },
+  {
+    name: 'regenerate_story',
+    description: '🔄 REGENERATE STORY (1-2 minutes): Regenerate a single user story based on user feedback using GPT-5. When user is unhappy with a story, use this to create an improved version with better acceptance criteria and technical tasks.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_context: {
+          type: 'object',
+          description: 'Original VISHKAR project context',
+          properties: {
+            project_summary: { type: 'object' },
+            final_decisions: { type: 'object' }
+          },
+          required: ['project_summary', 'final_decisions']
+        },
+        epic: {
+          type: 'object',
+          description: 'The parent epic object (for context)',
+          properties: {
+            id: { type: 'string' },
+            title: { type: 'string' },
+            description: { type: 'string' }
+          },
+          required: ['id', 'title', 'description']
+        },
+        story: {
+          type: 'object',
+          description: 'The story object to regenerate (must include id, title, description)',
+          properties: {
+            id: { type: 'string' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            priority: { type: 'string' },
+            estimate_hours: { type: 'number' }
+          },
+          required: ['id', 'title', 'description']
+        },
+        user_feedback: {
+          type: 'string',
+          description: 'User comments/feedback on what needs to be changed or improved in the story'
+        }
+      },
+      required: ['project_context', 'epic', 'story', 'user_feedback']
     }
   }
 ];
@@ -106,36 +170,30 @@ const MCP_TOOLS = [
 // TOOL HANDLERS
 // ============================================================
 
-async function handleGenerateBacklog(args: Record<string, any>) {
-  const { consensus_messages, project_metadata, use_full_context = true } = args;
+async function handleGenerateEpics(args: Record<string, any>) {
+  const { project_context } = args;
 
-  if (!consensus_messages || !Array.isArray(consensus_messages)) {
-    throw new Error('consensus_messages is required and must be an array');
+  if (!project_context || typeof project_context !== 'object') {
+    throw new Error('project_context is required and must be an object');
   }
 
-  if (consensus_messages.length === 0) {
-    throw new Error('consensus_messages cannot be empty');
+  if (!project_context.project_summary || !project_context.final_decisions) {
+    throw new Error('project_context must include project_summary and final_decisions');
   }
 
   // Call StoryCrafter service
   try {
     const response = await axios.post(
-      `${STORYCRAFTER_SERVICE_URL}/generate-backlog`,
+      `${STORYCRAFTER_SERVICE_URL}/generate-epics`,
+      { project_context },
       {
-        consensus_messages,
-        project_metadata,
-        use_full_context
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 300000 // 5 minutes (generation can take time)
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 60000 // 1 minute
       }
     );
 
     if (!response.data.success) {
-      throw new Error(response.data.error || 'Backlog generation failed');
+      throw new Error(response.data.error || 'Epic generation failed');
     }
 
     return {
@@ -144,13 +202,8 @@ async function handleGenerateBacklog(args: Record<string, any>) {
           type: 'text',
           text: JSON.stringify({
             success: true,
-            backlog: response.data.backlog,
-            summary: {
-              total_epics: response.data.metadata.total_epics,
-              total_stories: response.data.metadata.total_stories,
-              total_estimated_hours: response.data.metadata.total_estimated_hours,
-              generated_at: response.data.metadata.generated_at
-            }
+            epics: response.data.epics,
+            metadata: response.data.metadata
           }, null, 2)
         }
       ]
@@ -166,36 +219,163 @@ async function handleGenerateBacklog(args: Record<string, any>) {
   }
 }
 
-async function handleGetBacklogSummary(args: Record<string, any>) {
-  const { backlog } = args;
+async function handleGenerateStories(args: Record<string, any>) {
+  const { project_context, epics } = args;
 
-  if (!backlog || typeof backlog !== 'object') {
-    throw new Error('backlog is required and must be an object');
+  if (!project_context || typeof project_context !== 'object') {
+    throw new Error('project_context is required and must be an object');
   }
 
-  const summary = {
-    project_name: backlog.project?.name || 'Unknown',
-    total_epics: backlog.epics?.length || 0,
-    total_stories: backlog.epics?.reduce((sum: number, epic: any) => sum + (epic.stories?.length || 0), 0) || 0,
-    total_estimated_hours: backlog.epics?.reduce((sum: number, epic: any) => {
-      return sum + (epic.stories?.reduce((storySum: number, story: any) => storySum + (story.estimated_hours || 0), 0) || 0);
-    }, 0) || 0,
-    epics_breakdown: backlog.epics?.map((epic: any) => ({
-      id: epic.id,
-      title: epic.title,
-      story_count: epic.stories?.length || 0,
-      total_hours: epic.stories?.reduce((sum: number, story: any) => sum + (story.estimated_hours || 0), 0) || 0
-    })) || []
-  };
+  if (!epics || !Array.isArray(epics)) {
+    throw new Error('epics is required and must be an array');
+  }
 
-  return {
-    content: [
+  // Call StoryCrafter service
+  try {
+    const response = await axios.post(
+      `${STORYCRAFTER_SERVICE_URL}/generate-stories`,
+      { project_context, epics },
       {
-        type: 'text',
-        text: JSON.stringify(summary, null, 2)
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 600000 // 10 minutes
       }
-    ]
-  };
+    );
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Story generation failed');
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            epics_with_stories: response.data.epics_with_stories,
+            metadata: response.data.metadata
+          }, null, 2)
+        }
+      ]
+    };
+  } catch (error: any) {
+    if (error.response) {
+      throw new Error(`StoryCrafter service error: ${error.response.data?.detail || error.response.statusText}`);
+    } else if (error.request) {
+      throw new Error(`StoryCrafter service unavailable: ${STORYCRAFTER_SERVICE_URL}`);
+    } else {
+      throw new Error(`Request error: ${error.message}`);
+    }
+  }
+}
+
+async function handleRegenerateEpic(args: Record<string, any>) {
+  const { project_context, epic, user_feedback } = args;
+
+  if (!project_context || typeof project_context !== 'object') {
+    throw new Error('project_context is required and must be an object');
+  }
+
+  if (!epic || typeof epic !== 'object') {
+    throw new Error('epic is required and must be an object');
+  }
+
+  if (!user_feedback || typeof user_feedback !== 'string') {
+    throw new Error('user_feedback is required and must be a string');
+  }
+
+  // Call StoryCrafter service
+  try {
+    const response = await axios.post(
+      `${STORYCRAFTER_SERVICE_URL}/regenerate-epic`,
+      { project_context, epic, user_feedback },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 60000 // 1 minute
+      }
+    );
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Epic regeneration failed');
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            epic: response.data.epic,
+            metadata: response.data.metadata
+          }, null, 2)
+        }
+      ]
+    };
+  } catch (error: any) {
+    if (error.response) {
+      throw new Error(`StoryCrafter service error: ${error.response.data?.detail || error.response.statusText}`);
+    } else if (error.request) {
+      throw new Error(`StoryCrafter service unavailable: ${STORYCRAFTER_SERVICE_URL}`);
+    } else {
+      throw new Error(`Request error: ${error.message}`);
+    }
+  }
+}
+
+async function handleRegenerateStory(args: Record<string, any>) {
+  const { project_context, epic, story, user_feedback } = args;
+
+  if (!project_context || typeof project_context !== 'object') {
+    throw new Error('project_context is required and must be an object');
+  }
+
+  if (!epic || typeof epic !== 'object') {
+    throw new Error('epic is required and must be an object');
+  }
+
+  if (!story || typeof story !== 'object') {
+    throw new Error('story is required and must be an object');
+  }
+
+  if (!user_feedback || typeof user_feedback !== 'string') {
+    throw new Error('user_feedback is required and must be a string');
+  }
+
+  // Call StoryCrafter service
+  try {
+    const response = await axios.post(
+      `${STORYCRAFTER_SERVICE_URL}/regenerate-story`,
+      { project_context, epic, story, user_feedback },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 180000 // 3 minutes
+      }
+    );
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Story regeneration failed');
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            story: response.data.story,
+            metadata: response.data.metadata
+          }, null, 2)
+        }
+      ]
+    };
+  } catch (error: any) {
+    if (error.response) {
+      throw new Error(`StoryCrafter service error: ${error.response.data?.detail || error.response.statusText}`);
+    } else if (error.request) {
+      throw new Error(`StoryCrafter service unavailable: ${STORYCRAFTER_SERVICE_URL}`);
+    } else {
+      throw new Error(`Request error: ${error.message}`);
+    }
+  }
 }
 
 // ============================================================
@@ -219,12 +399,20 @@ export async function POST(request: NextRequest) {
 
         let result;
         switch (toolName) {
-          case 'generate_backlog':
-            result = await handleGenerateBacklog(args);
+          case 'generate_epics':
+            result = await handleGenerateEpics(args);
             break;
 
-          case 'get_backlog_summary':
-            result = await handleGetBacklogSummary(args);
+          case 'generate_stories':
+            result = await handleGenerateStories(args);
+            break;
+
+          case 'regenerate_epic':
+            result = await handleRegenerateEpic(args);
+            break;
+
+          case 'regenerate_story':
+            result = await handleRegenerateStory(args);
             break;
 
           default:
