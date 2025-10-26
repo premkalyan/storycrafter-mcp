@@ -9,6 +9,9 @@ import axios from 'axios';
 // StoryCrafter service URL (deployed separately)
 const STORYCRAFTER_SERVICE_URL = process.env.STORYCRAFTER_SERVICE_URL || 'https://storycrafter-service.vercel.app';
 
+// Project Registry URL
+const PROJECT_REGISTRY_URL = process.env.PROJECT_REGISTRY_URL || 'https://project-registry-henna.vercel.app';
+
 // ============================================================
 // TYPES
 // ============================================================
@@ -27,11 +30,121 @@ interface ProjectMetadata {
   team_size?: string;
 }
 
+interface AIProviderPreference {
+  provider: 'anthropic' | 'openai' | 'openrouter';
+  model: string;
+}
+
+interface AIProviderConfig {
+  anthropicApiKey?: string;
+  openaiApiKey?: string;
+  openrouterApiKey?: string;
+  preferences: {
+    epicGeneration?: AIProviderPreference;
+    storyGeneration?: AIProviderPreference;
+    agentConversations?: AIProviderPreference;
+    projectDescription?: AIProviderPreference;
+    contextLoading?: AIProviderPreference;
+  };
+}
+
+interface ProjectConfig {
+  projectId: string;
+  projectName: string;
+  configs: {
+    aiProvider?: AIProviderConfig;
+    jira?: any;
+    confluence?: any;
+    github?: any;
+  };
+}
+
 interface MCPRequest {
   method: string;
   params?: {
     tool?: string;
     arguments?: Record<string, any>;
+  };
+}
+
+// ============================================================
+// PROJECT REGISTRY CLIENT
+// ============================================================
+
+/**
+ * Fetch project configuration from Project Registry using Bearer token
+ * @param bearerToken - Prometheus API key (bearer token) from Authorization header
+ */
+async function getProjectConfig(bearerToken: string): Promise<ProjectConfig> {
+  try {
+    const response = await axios.get(
+      `${PROJECT_REGISTRY_URL}/api/projects/by-token`,
+      {
+        headers: {
+          'Authorization': `Bearer ${bearerToken}`
+        },
+        timeout: 10000
+      }
+    );
+
+    if (!response.data) {
+      throw new Error(`No configuration found for bearer token`);
+    }
+
+    return response.data;
+  } catch (error: any) {
+    if (error.response?.status === 401) {
+      throw new Error(`Invalid or expired bearer token. Please check your Prometheus API key.`);
+    }
+    if (error.response?.status === 404) {
+      throw new Error(`Project not found for this bearer token. Please register the project in VISHKAR settings.`);
+    }
+    throw new Error(`Failed to fetch project config: ${error.message}`);
+  }
+}
+
+/**
+ * Get AI provider configuration for a specific task
+ */
+function getAIProviderForTask(config: ProjectConfig, task: keyof AIProviderConfig['preferences']): {
+  provider: string;
+  model: string;
+  apiKey: string;
+} {
+  const aiConfig = config.configs.aiProvider;
+
+  if (!aiConfig) {
+    throw new Error('AI provider configuration not found in project config');
+  }
+
+  // Get preference for this task, with fallback defaults
+  const preference = aiConfig.preferences[task] || {
+    provider: 'anthropic',
+    model: 'claude-sonnet-4.5'
+  };
+
+  // Get API key for the provider
+  let apiKey: string | undefined;
+  switch (preference.provider) {
+    case 'anthropic':
+      apiKey = aiConfig.anthropicApiKey;
+      break;
+    case 'openai':
+      apiKey = aiConfig.openaiApiKey;
+      break;
+    case 'openrouter':
+      apiKey = aiConfig.openrouterApiKey;
+      break;
+  }
+
+  if (!apiKey) {
+    throw new Error(`API key not found for provider: ${preference.provider}`);
+  }
+
+  return {
+    provider: preference.provider,
+    model: preference.model,
+    apiKey
   };
 }
 
@@ -42,7 +155,7 @@ interface MCPRequest {
 const MCP_TOOLS = [
   {
     name: 'generate_epics',
-    description: '⚡ FAST (15-20 seconds): Generate 5-8 high-level Epics from VISHKAR project context using Claude Sonnet 4.5. Returns epic structure with titles, descriptions, and acceptance criteria. Use this first to get quick epic overview.',
+    description: '⚡ FAST (15-20 seconds): Generate 5-8 high-level Epics from VISHKAR project context. Uses AI provider from Project Registry config (fetched via X-API-Key header). Returns epic structure with titles, descriptions, and acceptance criteria. Use this first to get quick epic overview.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -62,7 +175,7 @@ const MCP_TOOLS = [
   },
   {
     name: 'generate_stories',
-    description: '🔄 DETAILED (3-5 minutes): Generate detailed User Stories for specific epics using GPT-5 (128K output). Takes epic data + context and returns comprehensive stories with acceptance criteria, technical tasks, and estimates. Call this after generate_epics for full backlog.',
+    description: '🔄 DETAILED (3-5 minutes): Generate detailed User Stories for specific epics. Uses AI provider from Project Registry config (fetched via X-API-Key header). Takes epic data + context and returns comprehensive stories with acceptance criteria, technical tasks, and estimates. Call this after generate_epics for full backlog.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -86,7 +199,7 @@ const MCP_TOOLS = [
   },
   {
     name: 'regenerate_epic',
-    description: '🔄 REGENERATE EPIC (20-30 seconds): Regenerate a single epic based on user feedback using Claude Sonnet 4.5. When user is unhappy with an epic, use this to create an improved version incorporating their comments.',
+    description: '🔄 REGENERATE EPIC (20-30 seconds): Regenerate a single epic based on user feedback. Uses AI provider from Project Registry config (fetched via X-API-Key header). When user is unhappy with an epic, use this to create an improved version incorporating their comments.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -121,7 +234,7 @@ const MCP_TOOLS = [
   },
   {
     name: 'regenerate_story',
-    description: '🔄 REGENERATE STORY (1-2 minutes): Regenerate a single user story based on user feedback using GPT-5. When user is unhappy with a story, use this to create an improved version with better acceptance criteria and technical tasks.',
+    description: '🔄 REGENERATE STORY (1-2 minutes): Regenerate a single user story based on user feedback. Uses AI provider from Project Registry config (fetched via X-API-Key header). When user is unhappy with a story, use this to create an improved version with better acceptance criteria and technical tasks.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -279,9 +392,10 @@ Team Size: ${projectSummary.team_size || projectSummary.teamSize || 'Not specifi
 // TOOL HANDLERS
 // ============================================================
 
-async function handleGenerateEpics(args: Record<string, any>) {
+async function handleGenerateEpics(args: Record<string, any>, bearerToken: string) {
   const { project_context } = args;
 
+  // Validate required parameters
   if (!project_context || typeof project_context !== 'object') {
     throw new Error('project_context is required and must be an object');
   }
@@ -290,16 +404,27 @@ async function handleGenerateEpics(args: Record<string, any>) {
     throw new Error('project_context must include project_summary and final_decisions');
   }
 
+  // Fetch AI provider configuration from Project Registry using Bearer token
+  const projectConfig = await getProjectConfig(bearerToken);
+  const aiConfig = getAIProviderForTask(projectConfig, 'epicGeneration');
+
+  console.log(`[Epic Generation] Using ${aiConfig.provider} ${aiConfig.model} for project ${projectConfig.projectId}`);
+
   // Transform VISHKAR format to service format
   const { consensus_messages, project_metadata } = transformProjectContext(project_context);
 
-  // Call StoryCrafter service with transformed format
+  // Call StoryCrafter service with transformed format + AI config
   try {
     const response = await axios.post(
       `${STORYCRAFTER_SERVICE_URL}/generate-epics`,
       {
         consensus_messages,
-        project_metadata
+        project_metadata,
+        ai_provider: {
+          provider: aiConfig.provider,
+          model: aiConfig.model,
+          api_key: aiConfig.apiKey
+        }
       },
       {
         headers: { 'Content-Type': 'application/json' },
@@ -318,7 +443,10 @@ async function handleGenerateEpics(args: Record<string, any>) {
           text: JSON.stringify({
             success: true,
             epics: response.data.epics,
-            metadata: response.data.metadata
+            metadata: {
+              ...response.data.metadata,
+              ai_provider_used: `${aiConfig.provider}/${aiConfig.model}`
+            }
           }, null, 2)
         }
       ]
@@ -334,9 +462,10 @@ async function handleGenerateEpics(args: Record<string, any>) {
   }
 }
 
-async function handleGenerateStories(args: Record<string, any>) {
+async function handleGenerateStories(args: Record<string, any>, bearerToken: string) {
   const { project_context, epics } = args;
 
+  // Validate required parameters
   if (!project_context || typeof project_context !== 'object') {
     throw new Error('project_context is required and must be an object');
   }
@@ -345,10 +474,16 @@ async function handleGenerateStories(args: Record<string, any>) {
     throw new Error('epics is required and must be an array');
   }
 
+  // Fetch AI provider configuration from Project Registry using Bearer token
+  const projectConfig = await getProjectConfig(bearerToken);
+  const aiConfig = getAIProviderForTask(projectConfig, 'storyGeneration');
+
+  console.log(`[Story Generation] Using ${aiConfig.provider} ${aiConfig.model} for project ${projectConfig.projectId}`);
+
   // Transform VISHKAR format to service format
   const { consensus_messages, project_metadata } = transformProjectContext(project_context);
 
-  // Call StoryCrafter service with transformed format
+  // Call StoryCrafter service with transformed format + AI config
   try {
     // Note: Service expects to receive epic objects and expand them with stories
     const response = await axios.post(
@@ -356,7 +491,12 @@ async function handleGenerateStories(args: Record<string, any>) {
       {
         epic: epics[0], // Service generates stories for one epic at a time
         consensus_messages,
-        project_metadata
+        project_metadata,
+        ai_provider: {
+          provider: aiConfig.provider,
+          model: aiConfig.model,
+          api_key: aiConfig.apiKey
+        }
       },
       {
         headers: { 'Content-Type': 'application/json' },
@@ -375,7 +515,10 @@ async function handleGenerateStories(args: Record<string, any>) {
           text: JSON.stringify({
             success: true,
             stories: response.data.stories,
-            metadata: response.data.metadata
+            metadata: {
+              ...response.data.metadata,
+              ai_provider_used: `${aiConfig.provider}/${aiConfig.model}`
+            }
           }, null, 2)
         }
       ]
@@ -391,7 +534,7 @@ async function handleGenerateStories(args: Record<string, any>) {
   }
 }
 
-async function handleRegenerateEpic(args: Record<string, any>) {
+async function handleRegenerateEpic(args: Record<string, any>, bearerToken: string) {
   const { project_context, epic, user_feedback } = args;
 
   if (!project_context || typeof project_context !== 'object') {
@@ -406,10 +549,16 @@ async function handleRegenerateEpic(args: Record<string, any>) {
     throw new Error('user_feedback is required and must be a string');
   }
 
+  // Fetch AI provider configuration from Project Registry using Bearer token
+  const projectConfig = await getProjectConfig(bearerToken);
+  const aiConfig = getAIProviderForTask(projectConfig, 'epicGeneration');
+
+  console.log(`[Epic Regeneration] Using ${aiConfig.provider} ${aiConfig.model} for project ${projectConfig.projectId}`);
+
   // Transform VISHKAR format to service format
   const { consensus_messages, project_metadata } = transformProjectContext(project_context);
 
-  // Call StoryCrafter service with transformed format
+  // Call StoryCrafter service with transformed format + AI config
   try {
     const response = await axios.post(
       `${STORYCRAFTER_SERVICE_URL}/regenerate-epic`,
@@ -417,7 +566,12 @@ async function handleRegenerateEpic(args: Record<string, any>) {
         epic,
         user_feedback,
         consensus_messages,
-        project_metadata
+        project_metadata,
+        ai_provider: {
+          provider: aiConfig.provider,
+          model: aiConfig.model,
+          api_key: aiConfig.apiKey
+        }
       },
       {
         headers: { 'Content-Type': 'application/json' },
@@ -436,7 +590,10 @@ async function handleRegenerateEpic(args: Record<string, any>) {
           text: JSON.stringify({
             success: true,
             epic: response.data.epic,
-            metadata: response.data.metadata
+            metadata: {
+              ...response.data.metadata,
+              ai_provider_used: `${aiConfig.provider}/${aiConfig.model}`
+            }
           }, null, 2)
         }
       ]
@@ -452,7 +609,7 @@ async function handleRegenerateEpic(args: Record<string, any>) {
   }
 }
 
-async function handleRegenerateStory(args: Record<string, any>) {
+async function handleRegenerateStory(args: Record<string, any>, bearerToken: string) {
   const { project_context, epic, story, user_feedback } = args;
 
   if (!project_context || typeof project_context !== 'object') {
@@ -471,10 +628,16 @@ async function handleRegenerateStory(args: Record<string, any>) {
     throw new Error('user_feedback is required and must be a string');
   }
 
+  // Fetch AI provider configuration from Project Registry using Bearer token
+  const projectConfig = await getProjectConfig(bearerToken);
+  const aiConfig = getAIProviderForTask(projectConfig, 'storyGeneration');
+
+  console.log(`[Story Regeneration] Using ${aiConfig.provider} ${aiConfig.model} for project ${projectConfig.projectId}`);
+
   // Transform VISHKAR format to service format
   const { consensus_messages, project_metadata } = transformProjectContext(project_context);
 
-  // Call StoryCrafter service with transformed format
+  // Call StoryCrafter service with transformed format + AI config
   try {
     const response = await axios.post(
       `${STORYCRAFTER_SERVICE_URL}/regenerate-story`,
@@ -483,7 +646,12 @@ async function handleRegenerateStory(args: Record<string, any>) {
         story,
         user_feedback,
         consensus_messages,
-        project_metadata
+        project_metadata,
+        ai_provider: {
+          provider: aiConfig.provider,
+          model: aiConfig.model,
+          api_key: aiConfig.apiKey
+        }
       },
       {
         headers: { 'Content-Type': 'application/json' },
@@ -502,7 +670,10 @@ async function handleRegenerateStory(args: Record<string, any>) {
           text: JSON.stringify({
             success: true,
             story: response.data.story,
-            metadata: response.data.metadata
+            metadata: {
+              ...response.data.metadata,
+              ai_provider_used: `${aiConfig.provider}/${aiConfig.model}`
+            }
           }, null, 2)
         }
       ]
@@ -534,25 +705,41 @@ export async function POST(request: NextRequest) {
         });
 
       case 'tools/call':
+        // Extract Bearer token from Authorization header
+        const authHeader = request.headers.get('Authorization') || '';
+        const bearerToken = authHeader.replace('Bearer ', '').trim();
+
+        if (!bearerToken) {
+          return NextResponse.json(
+            {
+              error: {
+                code: -32600,
+                message: 'Missing Authorization header. Please provide Bearer token (Prometheus API Key).'
+              }
+            },
+            { status: 401 }
+          );
+        }
+
         const toolName = body.params?.tool;
         const args = body.params?.arguments || {};
 
         let result;
         switch (toolName) {
           case 'generate_epics':
-            result = await handleGenerateEpics(args);
+            result = await handleGenerateEpics(args, bearerToken);
             break;
 
           case 'generate_stories':
-            result = await handleGenerateStories(args);
+            result = await handleGenerateStories(args, bearerToken);
             break;
 
           case 'regenerate_epic':
-            result = await handleRegenerateEpic(args);
+            result = await handleRegenerateEpic(args, bearerToken);
             break;
 
           case 'regenerate_story':
-            result = await handleRegenerateStory(args);
+            result = await handleRegenerateStory(args, bearerToken);
             break;
 
           default:
