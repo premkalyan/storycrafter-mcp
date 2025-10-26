@@ -77,11 +77,17 @@ interface MCPRequest {
  */
 async function getProjectConfig(bearerToken: string): Promise<ProjectConfig> {
   try {
+    console.log(`[StoryCrafter MCP] Fetching config from Project Registry`);
+    console.log(`[StoryCrafter MCP] Bearer token: ${bearerToken.substring(0, 20)}...`);
+    console.log(`[StoryCrafter MCP] Full URL: ${PROJECT_REGISTRY_URL}/api/projects/${bearerToken}`);
+
     // Use existing Project Registry endpoint - it returns full config with decrypted credentials
     const response = await axios.get(
       `${PROJECT_REGISTRY_URL}/api/projects/${bearerToken}`,
       { timeout: 10000 }
     );
+
+    console.log(`[StoryCrafter MCP] ✅ Got project config: ${response.data.projectId}`);
 
     if (!response.data) {
       throw new Error(`No configuration found for API key`);
@@ -89,6 +95,7 @@ async function getProjectConfig(bearerToken: string): Promise<ProjectConfig> {
 
     return response.data;
   } catch (error: any) {
+    console.error(`[StoryCrafter MCP] ❌ Error fetching config:`, error.response?.status, error.message);
     if (error.response?.status === 404) {
       throw new Error(`Project not found for this API key. Please register the project in VISHKAR settings.`);
     }
@@ -701,6 +708,9 @@ export async function POST(request: NextRequest) {
         // Extract Bearer token from Authorization header
         const authHeader = request.headers.get('Authorization') || '';
         const bearerToken = authHeader.replace('Bearer ', '').trim();
+
+        console.log(`[StoryCrafter MCP] Authorization header: ${authHeader.substring(0, 30)}...`);
+        console.log(`[StoryCrafter MCP] Extracted bearer token: ${bearerToken.substring(0, 20)}...`);
 
         if (!bearerToken) {
           return NextResponse.json(
