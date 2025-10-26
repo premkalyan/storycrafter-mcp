@@ -1,0 +1,97 @@
+{
+  "test_name": "Test 4: Regenerate Story",
+  "description": "Regenerate a single story based on user feedback",
+  "prerequisite": "Run test_2_generate_stories.json first to get a story",
+  "mcp_request": {
+    "method": "tools/call",
+    "params": {
+      "tool": "regenerate_story",
+      "arguments": {
+        "project_context": {
+          "project_summary": {
+            "project_name": "Task Manager App",
+            "project_description": "A simple task management application for students to track their assignments and deadlines",
+            "target_users": "College students",
+            "platform": "Web (React + Node.js)",
+            "timeline": "8 weeks",
+            "team_size": "2 developers"
+          },
+          "final_decisions": {
+            "product": {
+              "mvp_features": [
+                "User can create, edit, and delete tasks"
+              ],
+              "target_users": "College students"
+            },
+            "technical": {
+              "frontend": "React with TypeScript",
+              "backend": "Node.js with Express",
+              "authentication": "JWT-based"
+            },
+            "project": {
+              "timeline": "8 weeks",
+              "team": "2 developers"
+            }
+          }
+        },
+        "epic": {
+          "id": "EPIC-1",
+          "title": "User Authentication & Account Management",
+          "description": "Complete user authentication system",
+          "priority": "High",
+          "category": "MVP"
+        },
+        "story": {
+          "id": "EPIC-1-1",
+          "title": "User Registration",
+          "description": "As a user, I want to register for an account so I can access the application",
+          "acceptance_criteria": [
+            "User can enter email and password",
+            "System validates email format",
+            "Password meets minimum requirements"
+          ],
+          "technical_tasks": [
+            "Create registration API endpoint",
+            "Build registration form component",
+            "Add validation logic"
+          ],
+          "priority": "P0",
+          "story_points": 5,
+          "estimated_hours": 10
+        },
+        "user_feedback": "Add email verification requirement. User should receive a verification email and must verify before they can login. Also add stronger password requirements (min 12 chars, special characters)."
+      }
+    }
+  },
+  "expected_response": {
+    "success": true,
+    "story": {
+      "id": "EPIC-1-1",
+      "title": "User Registration with Email Verification",
+      "description": "As a user, I want to register with email verification so my account is secure",
+      "acceptance_criteria": [
+        "User can enter email and password",
+        "System validates email format",
+        "Password requires min 12 chars with special characters",
+        "Verification email sent on registration",
+        "User cannot login until email verified",
+        "Verification link expires after 24 hours"
+      ],
+      "technical_tasks": [
+        "Create registration API endpoint",
+        "Build registration form component",
+        "Add enhanced validation logic",
+        "Implement email verification service",
+        "Create email templates",
+        "Build verification UI flow"
+      ],
+      "priority": "P0",
+      "story_points": 8,
+      "estimated_hours": 16,
+      "regeneration_notes": "Added email verification and stronger password requirements per feedback"
+    },
+    "metadata": {
+      "regenerated_at": "ISO timestamp"
+    }
+  }
+}

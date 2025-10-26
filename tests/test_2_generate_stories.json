@@ -1,0 +1,66 @@
+{
+  "test_name": "Test 2: Generate Stories",
+  "description": "Generate detailed stories for a specific epic (Phase 2)",
+  "prerequisite": "Run test_1_generate_epics.json first to get epics",
+  "mcp_request": {
+    "method": "tools/call",
+    "params": {
+      "tool": "generate_stories",
+      "arguments": {
+        "project_context": {
+          "project_summary": {
+            "project_name": "Task Manager App",
+            "project_description": "A simple task management application for students to track their assignments and deadlines",
+            "target_users": "College students",
+            "platform": "Web (React + Node.js)",
+            "timeline": "8 weeks",
+            "team_size": "2 developers"
+          },
+          "final_decisions": {
+            "product": {
+              "mvp_features": [
+                "User can create, edit, and delete tasks",
+                "Tasks have title, description, due date, and priority",
+                "Users can mark tasks as complete",
+                "Simple dashboard showing upcoming and overdue tasks",
+                "Filter tasks by priority and status"
+              ],
+              "target_users": "College students managing multiple assignments"
+            },
+            "technical": {
+              "frontend": "React with TypeScript",
+              "backend": "Node.js with Express",
+              "database": "PostgreSQL",
+              "authentication": "JWT-based"
+            },
+            "project": {
+              "timeline": "8 weeks",
+              "team": "2 developers"
+            }
+          }
+        },
+        "epics": [
+          {
+            "id": "EPIC-1",
+            "title": "User Authentication & Account Management",
+            "description": "Implement complete user authentication system including signup, login, password reset, and profile management",
+            "priority": "High",
+            "category": "MVP",
+            "story_count_target": 4
+          }
+        ]
+      }
+    }
+  },
+  "expected_response": {
+    "success": true,
+    "stories": [
+      "Array of 4 story objects with id, title, description, acceptance_criteria, technical_tasks, story_points, estimated_hours"
+    ],
+    "metadata": {
+      "epic_id": "EPIC-1",
+      "total_stories": 4,
+      "generated_at": "ISO timestamp"
+    }
+  }
+}

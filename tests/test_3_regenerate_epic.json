@@ -1,0 +1,64 @@
+{
+  "test_name": "Test 3: Regenerate Epic",
+  "description": "Regenerate a single epic based on user feedback",
+  "prerequisite": "Run test_1_generate_epics.json first to get an epic",
+  "mcp_request": {
+    "method": "tools/call",
+    "params": {
+      "tool": "regenerate_epic",
+      "arguments": {
+        "project_context": {
+          "project_summary": {
+            "project_name": "Task Manager App",
+            "project_description": "A simple task management application for students to track their assignments and deadlines",
+            "target_users": "College students",
+            "platform": "Web (React + Node.js)",
+            "timeline": "8 weeks",
+            "team_size": "2 developers"
+          },
+          "final_decisions": {
+            "product": {
+              "mvp_features": [
+                "User can create, edit, and delete tasks",
+                "Tasks have title, description, due date, and priority"
+              ],
+              "target_users": "College students"
+            },
+            "technical": {
+              "frontend": "React with TypeScript",
+              "backend": "Node.js with Express",
+              "authentication": "JWT-based"
+            },
+            "project": {
+              "timeline": "8 weeks",
+              "team": "2 developers"
+            }
+          }
+        },
+        "epic": {
+          "id": "EPIC-1",
+          "title": "User Authentication",
+          "description": "Basic user authentication with email and password",
+          "priority": "High",
+          "category": "MVP"
+        },
+        "user_feedback": "Instead of email/password authentication, focus on OAuth social login with Google and GitHub. This is more modern and reduces password management complexity for users."
+      }
+    }
+  },
+  "expected_response": {
+    "success": true,
+    "epic": {
+      "id": "EPIC-1",
+      "title": "OAuth Social Authentication",
+      "description": "Implement OAuth authentication with Google and GitHub providers",
+      "priority": "High",
+      "category": "MVP",
+      "story_count_target": 4,
+      "regeneration_notes": "Updated to focus on OAuth per user feedback"
+    },
+    "metadata": {
+      "regenerated_at": "ISO timestamp"
+    }
+  }
+}
