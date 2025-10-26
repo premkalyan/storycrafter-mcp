@@ -8,8 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "update-registry": "node scripts/update-registry.js",
-    "postbuild": "npm run update-registry"
+    "update-registry": "node scripts/update-registry.js"
   },
   "dependencies": {
     "axios": "^1.12.2",
