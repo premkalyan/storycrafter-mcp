@@ -167,6 +167,115 @@ const MCP_TOOLS = [
 ];
 
 // ============================================================
+// TRANSFORMATION HELPER
+// ============================================================
+
+/**
+ * Transform VISHKAR project_context format into StoryCrafter service format
+ * Input: { project_summary, final_decisions }
+ * Output: { consensus_messages[], project_metadata }
+ */
+function transformProjectContext(projectContext: any): { consensus_messages: ConsensusMessage[], project_metadata: ProjectMetadata } {
+  const messages: ConsensusMessage[] = [];
+
+  // Add system message with project summary
+  const projectSummary = projectContext.project_summary || projectContext.projectSummary;
+  if (projectSummary) {
+    const systemContent = `Project: ${projectSummary.project_name || projectSummary.projectName || 'Untitled Project'}
+
+${projectSummary.project_description || projectSummary.projectDescription || ''}
+
+Target Users: ${projectSummary.target_users || projectSummary.targetUsers || 'Not specified'}
+Platform: ${projectSummary.platform || 'Not specified'}
+Timeline: ${projectSummary.timeline || 'Not specified'}
+Team Size: ${projectSummary.team_size || projectSummary.teamSize || 'Not specified'}`;
+
+    messages.push({ role: 'system', content: systemContent });
+  }
+
+  // Extract final decisions
+  const finalDecisions = projectContext.final_decisions || projectContext.finalDecisions;
+
+  if (finalDecisions) {
+    // Alex (Product Manager)
+    if (finalDecisions.product) {
+      const product = finalDecisions.product;
+      let alexContent = 'Product Manager Perspective - MVP Requirements:\n\n';
+
+      if (product.mvp_features || product.mvpFeatures) {
+        alexContent += 'MVP Features:\n';
+        const features = product.mvp_features || product.mvpFeatures;
+        features.forEach((feature: string) => alexContent += `- ${feature}\n`);
+      }
+
+      if (product.target_users || product.targetUsers) {
+        alexContent += `\nTarget Users: ${product.target_users || product.targetUsers}`;
+      }
+
+      if (product.development_approach || product.developmentApproach) {
+        alexContent += `\nDevelopment Approach: ${product.development_approach || product.developmentApproach}`;
+      }
+
+      messages.push({ role: 'alex', content: alexContent.trim() });
+    }
+
+    // Blake (Technical Architect)
+    if (finalDecisions.technical) {
+      const tech = finalDecisions.technical;
+      let blakeContent = 'Technical Architect Perspective - Architecture & Stack:\n\n';
+
+      Object.keys(tech).forEach(key => {
+        const label = key.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+        blakeContent += `${label}: ${tech[key]}\n`;
+      });
+
+      messages.push({ role: 'blake', content: blakeContent.trim() });
+    }
+
+    // Casey (Project Manager)
+    if (finalDecisions.project) {
+      const project = finalDecisions.project;
+      let caseyContent = 'Project Manager Perspective - Timeline & Execution:\n\n';
+
+      if (project.timeline) {
+        caseyContent += `Timeline: ${project.timeline}\n`;
+      }
+
+      if (project.team) {
+        caseyContent += `Team Composition: ${project.team}\n`;
+      }
+
+      if (project.milestones) {
+        caseyContent += '\nMilestones:\n';
+        Object.keys(project.milestones).forEach(key => {
+          const label = key.replace(/_/g, ' ').toUpperCase();
+          caseyContent += `- ${label}: ${project.milestones[key]}\n`;
+        });
+      }
+
+      if (project.testing) {
+        caseyContent += `\nTesting Strategy: ${project.testing}`;
+      }
+
+      messages.push({ role: 'casey', content: caseyContent.trim() });
+    }
+  }
+
+  // Extract project metadata
+  const metadata: ProjectMetadata = {};
+  if (projectSummary) {
+    metadata.project_name = projectSummary.project_name || projectSummary.projectName;
+    metadata.project_description = projectSummary.project_description || projectSummary.projectDescription;
+    metadata.target_users = projectSummary.target_users || projectSummary.targetUsers;
+    metadata.platform = projectSummary.platform;
+    metadata.timeline = projectSummary.timeline;
+    metadata.team_size = projectSummary.team_size || projectSummary.teamSize;
+  }
+
+  return { consensus_messages: messages, project_metadata: metadata };
+}
+
+// ============================================================
 // TOOL HANDLERS
 // ============================================================
 
@@ -181,11 +290,17 @@ async function handleGenerateEpics(args: Record<string, any>) {
     throw new Error('project_context must include project_summary and final_decisions');
   }
 
-  // Call StoryCrafter service
+  // Transform VISHKAR format to service format
+  const { consensus_messages, project_metadata } = transformProjectContext(project_context);
+
+  // Call StoryCrafter service with transformed format
   try {
     const response = await axios.post(
       `${STORYCRAFTER_SERVICE_URL}/generate-epics`,
-      { project_context },
+      {
+        consensus_messages,
+        project_metadata
+      },
       {
         headers: { 'Content-Type': 'application/json' },
         timeout: 60000 // 1 minute
@@ -230,11 +345,19 @@ async function handleGenerateStories(args: Record<string, any>) {
     throw new Error('epics is required and must be an array');
   }
 
-  // Call StoryCrafter service
+  // Transform VISHKAR format to service format
+  const { consensus_messages, project_metadata } = transformProjectContext(project_context);
+
+  // Call StoryCrafter service with transformed format
   try {
+    // Note: Service expects to receive epic objects and expand them with stories
     const response = await axios.post(
       `${STORYCRAFTER_SERVICE_URL}/generate-stories`,
-      { project_context, epics },
+      {
+        epic: epics[0], // Service generates stories for one epic at a time
+        consensus_messages,
+        project_metadata
+      },
       {
         headers: { 'Content-Type': 'application/json' },
         timeout: 600000 // 10 minutes
@@ -251,7 +374,7 @@ async function handleGenerateStories(args: Record<string, any>) {
           type: 'text',
           text: JSON.stringify({
             success: true,
-            epics_with_stories: response.data.epics_with_stories,
+            stories: response.data.stories,
             metadata: response.data.metadata
           }, null, 2)
         }
@@ -283,11 +406,19 @@ async function handleRegenerateEpic(args: Record<string, any>) {
     throw new Error('user_feedback is required and must be a string');
   }
 
-  // Call StoryCrafter service
+  // Transform VISHKAR format to service format
+  const { consensus_messages, project_metadata } = transformProjectContext(project_context);
+
+  // Call StoryCrafter service with transformed format
   try {
     const response = await axios.post(
       `${STORYCRAFTER_SERVICE_URL}/regenerate-epic`,
-      { project_context, epic, user_feedback },
+      {
+        epic,
+        user_feedback,
+        consensus_messages,
+        project_metadata
+      },
       {
         headers: { 'Content-Type': 'application/json' },
         timeout: 60000 // 1 minute
@@ -340,11 +471,20 @@ async function handleRegenerateStory(args: Record<string, any>) {
     throw new Error('user_feedback is required and must be a string');
   }
 
-  // Call StoryCrafter service
+  // Transform VISHKAR format to service format
+  const { consensus_messages, project_metadata } = transformProjectContext(project_context);
+
+  // Call StoryCrafter service with transformed format
   try {
     const response = await axios.post(
       `${STORYCRAFTER_SERVICE_URL}/regenerate-story`,
-      { project_context, epic, story, user_feedback },
+      {
+        epic,
+        story,
+        user_feedback,
+        consensus_messages,
+        project_metadata
+      },
       {
         headers: { 'Content-Type': 'application/json' },
         timeout: 180000 // 3 minutes
