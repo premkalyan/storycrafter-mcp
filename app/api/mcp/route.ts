@@ -1,6 +1,7 @@
 /**
  * StoryCrafter MCP Server
  * AI-powered backlog generator for VISHKAR consensus discussions
+ * Supports MCP protocol (Streamable HTTP transport)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -11,6 +12,15 @@ const STORYCRAFTER_SERVICE_URL = process.env.STORYCRAFTER_SERVICE_URL || 'https:
 
 // Project Registry URL
 const PROJECT_REGISTRY_URL = process.env.PROJECT_REGISTRY_URL || 'https://project-registry-henna.vercel.app';
+
+// MCP Server Info
+const SERVER_INFO = {
+  name: 'storycrafter-mcp',
+  version: '1.0.1'
+};
+
+// MCP Protocol Version
+const PROTOCOL_VERSION = '2024-11-05';
 
 // ============================================================
 // TYPES
@@ -716,92 +726,136 @@ async function handleRegenerateStory(args: Record<string, any>, bearerToken: str
 
 export async function POST(request: NextRequest) {
   try {
-    const body: MCPRequest = await request.json();
+    const body = await request.json();
 
-    // Handle MCP protocol methods
-    switch (body.method) {
-      case 'tools/list':
+    // ============================================================
+    // MCP PROTOCOL HANDLERS (Streamable HTTP Transport)
+    // No auth required for discovery - auth only for tools/call
+    // ============================================================
+
+    // 1. INITIALIZE - MCP handshake
+    if (body.method === 'initialize') {
+      console.log('MCP: Initialize request received');
+      return NextResponse.json({
+        jsonrpc: '2.0',
+        id: body.id,
+        result: {
+          protocolVersion: PROTOCOL_VERSION,
+          capabilities: {
+            tools: {}
+          },
+          serverInfo: SERVER_INFO
+        }
+      });
+    }
+
+    // 2. INITIALIZED - Client acknowledgment
+    if (body.method === 'notifications/initialized') {
+      console.log('MCP: Client initialized');
+      return new NextResponse(null, { status: 204 });
+    }
+
+    // 3. TOOLS/LIST - Return available tools (no auth required)
+    if (body.method === 'tools/list') {
+      console.log('MCP: Tools list request');
+      return NextResponse.json({
+        jsonrpc: '2.0',
+        id: body.id,
+        result: { tools: MCP_TOOLS }
+      });
+    }
+
+    // 4. PING - Health check (no auth required)
+    if (body.method === 'ping') {
+      return NextResponse.json({
+        jsonrpc: '2.0',
+        id: body.id,
+        result: {}
+      });
+    }
+
+    // ============================================================
+    // AUTHENTICATED ENDPOINTS (tools/call)
+    // ============================================================
+
+    if (body.method === 'tools/call') {
+      // Extract Bearer token from Authorization header
+      const authHeader = request.headers.get('Authorization') || '';
+      const bearerToken = authHeader.replace('Bearer ', '').trim();
+
+      console.log(`[StoryCrafter MCP] Authorization header: ${authHeader.substring(0, 30)}...`);
+
+      if (!bearerToken) {
         return NextResponse.json({
-          tools: MCP_TOOLS
-        });
+          jsonrpc: '2.0',
+          id: body.id,
+          error: {
+            code: -32600,
+            message: 'Missing Authorization header. Please provide Bearer token (Project Registry API Key).'
+          }
+        }, { status: 401 });
+      }
 
-      case 'tools/call':
-        // Extract Bearer token from Authorization header
-        const authHeader = request.headers.get('Authorization') || '';
-        const bearerToken = authHeader.replace('Bearer ', '').trim();
+      // Support both MCP format (params.name) and legacy format (params.tool)
+      const toolName = body.params?.name || body.params?.tool;
+      const args = body.params?.arguments || {};
 
-        console.log(`[StoryCrafter MCP] Authorization header: ${authHeader.substring(0, 30)}...`);
-        console.log(`[StoryCrafter MCP] Extracted bearer token: ${bearerToken.substring(0, 20)}...`);
+      let result;
+      switch (toolName) {
+        case 'generate_epics':
+          result = await handleGenerateEpics(args, bearerToken);
+          break;
 
-        if (!bearerToken) {
-          return NextResponse.json(
-            {
-              error: {
-                code: -32600,
-                message: 'Missing Authorization header. Please provide Bearer token (Prometheus API Key).'
-              }
-            },
-            { status: 401 }
-          );
-        }
+        case 'generate_stories':
+          result = await handleGenerateStories(args, bearerToken);
+          break;
 
-        const toolName = body.params?.tool;
-        const args = body.params?.arguments || {};
+        case 'regenerate_epic':
+          result = await handleRegenerateEpic(args, bearerToken);
+          break;
 
-        let result;
-        switch (toolName) {
-          case 'generate_epics':
-            result = await handleGenerateEpics(args, bearerToken);
-            break;
+        case 'regenerate_story':
+          result = await handleRegenerateStory(args, bearerToken);
+          break;
 
-          case 'generate_stories':
-            result = await handleGenerateStories(args, bearerToken);
-            break;
-
-          case 'regenerate_epic':
-            result = await handleRegenerateEpic(args, bearerToken);
-            break;
-
-          case 'regenerate_story':
-            result = await handleRegenerateStory(args, bearerToken);
-            break;
-
-          default:
-            return NextResponse.json(
-              {
-                error: {
-                  code: -32601,
-                  message: `Unknown tool: ${toolName}`
-                }
-              },
-              { status: 400 }
-            );
-        }
-
-        return NextResponse.json(result);
-
-      default:
-        return NextResponse.json(
-          {
+        default:
+          return NextResponse.json({
+            jsonrpc: '2.0',
+            id: body.id,
             error: {
               code: -32601,
-              message: `Method not found: ${body.method}`
+              message: `Unknown tool: ${toolName}. Available tools: generate_epics, generate_stories, regenerate_epic, regenerate_story`
             }
-          },
-          { status: 400 }
-        );
+          }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        jsonrpc: '2.0',
+        id: body.id,
+        result
+      });
     }
+
+    // Unknown method
+    return NextResponse.json({
+      jsonrpc: '2.0',
+      id: body.id || null,
+      error: {
+        code: -32601,
+        message: `Method not found: ${body.method}. Use initialize, tools/list, or tools/call.`
+      }
+    }, { status: 400 });
+
   } catch (error: any) {
     console.error('MCP Error:', error);
-    return NextResponse.json(
-      {
-        error: {
-          code: -32603,
-          message: error.message || 'Internal error'
-        }
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      jsonrpc: '2.0',
+      id: null,
+      error: {
+        code: -32603,
+        message: error.message || 'Internal error'
+      }
+    }, { status: 500 });
   }
 }
 
